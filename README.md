@@ -31,6 +31,10 @@ Lengkapi nilai berikut di `.env.local`:
 - **Gemini API**: Dapatkan dari [Google AI Studio](https://makersuite.google.com/app/apikey)
   - `VITE_GEMINI_API_KEY`
 
+Security note: don't commit `.env.local` containing secrets. This repo now
+includes `server/` — a small proxy you can run to keep the Gemini API key on
+the backend. See `server/README.md` for details.
+
 ### 3. Jalankan dev server
 
 ```bash

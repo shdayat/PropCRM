@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow read for authenticated users, deny public unauthenticated access
+    match /{document=**} {
+      allow read: if request.auth != null;
+      // Writes only allowed if authenticated and minimal checks
+      allow create, update, delete: if request.auth != null && isValidWrite(request);
+    }
+
+    function isValidWrite(request) {
+      // Basic example: prevent user from escalating role via client
+      // Require that 'role' field (if present) is only set by server (cloud function)
+      return !(request.resource.data.keys().hasAny(['role']) && request.auth.token.role == null);
+    }
+  }
+}
+
+// NOTE: Adapt rules to your data model. This is a minimal example to
+// disallow public writes/reads. Review and test thoroughly before deploying.
