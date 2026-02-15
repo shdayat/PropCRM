@@ -146,15 +146,6 @@ const LoginView = ({ onLogin }) => {
             Masuk Aplikasi
           </Button>
         </form>
-
-        <div className="mt-8 pt-6 border-t border-stone-100 dark:border-stone-700 text-center">
-          <p className="text-xs text-stone-400 mb-2 font-semibold uppercase">Akun Demo</p>
-          <div className="flex flex-wrap justify-center gap-2 text-[10px] text-stone-500">
-            <span className="px-3 py-1 bg-stone-100 rounded-full cursor-pointer hover:bg-stone-200 border border-stone-200" onClick={() => {setUsername('admin'); setPin('1234')}}>admin / 1234</span>
-            <span className="px-3 py-1 bg-stone-100 rounded-full cursor-pointer hover:bg-stone-200 border border-stone-200" onClick={() => {setUsername('sales'); setPin('1234')}}>sales / 1234</span>
-            <span className="px-3 py-1 bg-stone-100 rounded-full cursor-pointer hover:bg-stone-200 border border-stone-200" onClick={() => {setUsername('finance'); setPin('1234')}}>finance / 1234</span>
-          </div>
-        </div>
       </Card>
     </div>
   );
