@@ -18,15 +18,13 @@ import {
   Edit2,
   Trash2,
   Save,
-  Briefcase
+  Briefcase,
+  Shield
 } from 'lucide-react';
-import { db } from './firebase';
-import { collection, addDoc, onSnapshot, doc, setDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
-import { analyzeKPR } from './gemini';
 
-// --- Utilitas & Komponen Dasar ---
+// --- Utilitas & Konfigurasi UI ---
 
-// Menggunakan mapping statis untuk warna agar Tailwind mendeteksinya dengan benar
+// Mapping warna statis untuk memastikan Tailwind merender kelas dengan benar
 const COLOR_MAP = {
   blue: { bg: "bg-blue-100", text: "text-blue-600", border: "border-blue-100", light: "bg-blue-50" },
   green: { bg: "bg-green-100", text: "text-green-600", border: "border-green-100", light: "bg-green-50" },
@@ -53,16 +51,19 @@ const Button = ({ children, onClick, variant = "primary", className = "", disabl
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className={`px-4 py-2.5 rounded-xl font-medium transition-transform active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 ${variants[variant]} ${className}`}>
+      className={`px-4 py-2.5 rounded-xl font-medium transition-transform active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 ${variants[variant]} ${className}`}
+    >
       {children}
     </button>
   );
 };
 
+// --- Komponen Modal (Pop-up) ---
+
 const Modal = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm transition-opacity">
       <div className="bg-white dark:bg-slate-800 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden transform transition-all scale-100 opacity-100">
         <div className="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-700">
           <h3 className="font-bold text-lg">{title}</h3>
@@ -77,6 +78,8 @@ const Modal = ({ isOpen, onClose, title, children }) => {
     </div>
   );
 };
+
+// --- View: Login ---
 
 const LoginView = ({ onLogin }) => {
   const [username, setUsername] = useState('');
@@ -109,7 +112,7 @@ const LoginView = ({ onLogin }) => {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm font-medium"
-                placeholder="Contoh: admin, sales, finance"
+                placeholder="Contoh: admin"
               />
             </div>
           </div>
@@ -151,6 +154,8 @@ const LoginView = ({ onLogin }) => {
     </div>
   );
 };
+
+// --- View: Dashboard ---
 
 const Dashboard = ({ leads = [], finances = [], onSimulasiClick, userRole }) => {
   const stats = [
@@ -243,6 +248,123 @@ const Dashboard = ({ leads = [], finances = [], onSimulasiClick, userRole }) => 
   );
 };
 
+// --- View: User Management (Admin Only) ---
+
+const UserManagementView = ({ users, onSaveUser, onDeleteUser }) => {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editData, setEditData] = useState(null);
+
+  const handleEdit = (user) => {
+    setEditData(user);
+    setIsModalOpen(true);
+  };
+
+  const handleAdd = () => {
+    setEditData(null);
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const data = {
+      id: editData ? editData.id : Date.now(),
+      name: formData.get('name'),
+      username: formData.get('username'),
+      pin: formData.get('pin'),
+      role: formData.get('role'),
+    };
+    onSaveUser(data);
+    setIsModalOpen(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-xl font-bold">Manajemen User (Admin)</h2>
+        <Button onClick={handleAdd}><Plus size={18} /> Tambah User</Button>
+      </div>
+
+      <Card className="overflow-hidden p-0">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 dark:bg-slate-700/50">
+              <tr>
+                <th className="px-6 py-4">Nama User</th>
+                <th className="px-6 py-4">Username</th>
+                <th className="px-6 py-4">Role / Divisi</th>
+                <th className="px-6 py-4">PIN Akses</th>
+                <th className="px-6 py-4 text-center">Aksi</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+              {users.map(u => (
+                <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                  <td className="px-6 py-4 font-medium flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600 text-xs">
+                      {u.name.charAt(0)}
+                    </div>
+                    {u.name}
+                  </td>
+                  <td className="px-6 py-4 text-slate-500">{u.username}</td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase ${
+                      u.role === 'admin' ? 'bg-purple-100 text-purple-600' :
+                      u.role === 'finance' ? 'bg-green-100 text-green-600' :
+                      'bg-blue-100 text-blue-600'
+                    }`}>
+                      {u.role}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 font-mono text-slate-500">****</td>
+                  <td className="px-6 py-4 flex justify-center gap-2">
+                    <button onClick={() => handleEdit(u)} className="p-2 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"><Edit2 size={16} /></button>
+                    {u.username !== 'admin' && (
+                      <button onClick={() => onDeleteUser(u.id)} className="p-2 hover:bg-red-100 text-red-600 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editData ? "Edit User" : "Tambah User Baru"}>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase">Nama Lengkap</label>
+            <input name="name" defaultValue={editData?.name} required className="w-full mt-1 p-3 bg-slate-50 dark:bg-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+             <div>
+              <label className="text-xs font-bold text-slate-500 uppercase">Username</label>
+              <input name="username" defaultValue={editData?.username} required className="w-full mt-1 p-3 bg-slate-50 dark:bg-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase">PIN (4 Digit)</label>
+              <input name="pin" type="text" maxLength={4} defaultValue={editData?.pin} required className="w-full mt-1 p-3 bg-slate-50 dark:bg-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase">Role / Divisi</label>
+            <select name="role" defaultValue={editData?.role || "marketing"} className="w-full mt-1 p-3 bg-slate-50 dark:bg-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="marketing">Marketing (Sales)</option>
+              <option value="finance">Finance (Keuangan)</option>
+              <option value="admin">Administrator (Full Access)</option>
+            </select>
+          </div>
+          <Button type="submit" className="w-full py-3 mt-2">
+            <Save size={18} /> Simpan Data User
+          </Button>
+        </form>
+      </Modal>
+    </div>
+  );
+};
+
+// --- View: Leads ---
+
 const LeadsView = ({ leads, onSaveLead, onDeleteLead }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editData, setEditData] = useState(null);
@@ -261,13 +383,13 @@ const LeadsView = ({ leads, onSaveLead, onDeleteLead }) => {
     e.preventDefault();
     const formData = new FormData(e.target);
     const data = {
+      id: editData ? editData.id : Date.now(),
       nama: formData.get('nama'),
       phone: formData.get('phone'),
       unit: formData.get('unit'),
       email: formData.get('email'),
       status: formData.get('status'),
     };
-    if (editData && editData.id) data.id = editData.id;
     onSaveLead(data);
     setIsModalOpen(false);
   };
@@ -363,6 +485,8 @@ const LeadsView = ({ leads, onSaveLead, onDeleteLead }) => {
   );
 };
 
+// --- View: Finance ---
+
 const FinanceView = ({ finances, onSaveFinance, onDeleteFinance }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editData, setEditData] = useState(null);
@@ -381,16 +505,17 @@ const FinanceView = ({ finances, onSaveFinance, onDeleteFinance }) => {
     e.preventDefault();
     const formData = new FormData(e.target);
     const data = {
+      id: editData ? editData.id : Date.now(),
       deskripsi: formData.get('deskripsi'),
       tipe: formData.get('tipe'),
       jumlah: Number(formData.get('jumlah')),
       tanggal: formData.get('tanggal'),
     };
-    if (editData && editData.id) data.id = editData.id;
     onSaveFinance(data);
     setIsModalOpen(false);
   };
 
+  // Hitung total secara dinamis
   const totalMasuk = finances.filter(f => f.tipe === 'Masuk').reduce((acc, curr) => acc + curr.jumlah, 0);
   const totalKeluar = finances.filter(f => f.tipe === 'Keluar').reduce((acc, curr) => acc + curr.jumlah, 0);
   const saldoBersih = totalMasuk - totalKeluar;
@@ -493,7 +618,9 @@ const FinanceView = ({ finances, onSaveFinance, onDeleteFinance }) => {
   );
 };
 
-const SimulasiView = ({ params, setParams, onCalculate, result, isAnalyzing }) => (
+// --- View: Simulasi ---
+
+const SimulasiView = ({ params, setParams, onCalculate, result }) => (
   <div className="space-y-6">
     <div className="flex items-center gap-3">
       <div className="p-2 bg-blue-600 text-white rounded-lg">
@@ -544,8 +671,8 @@ const SimulasiView = ({ params, setParams, onCalculate, result, isAnalyzing }) =
               className="w-full mt-1 p-3 bg-slate-50 dark:bg-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
-          <Button className="w-full py-4" onClick={onCalculate} disabled={isAnalyzing}>
-             {isAnalyzing ? 'Sedang Menganalisa...' : 'Mulai Analisa AI'}
+          <Button className="w-full py-4" onClick={onCalculate}>
+             Mulai Analisa AI
           </Button>
         </div>
       </Card>
@@ -603,13 +730,30 @@ const SimulasiView = ({ params, setParams, onCalculate, result, isAnalyzing }) =
   </div>
 );
 
+// --- Komponen Utama Aplikasi (App Shell) ---
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
-  
-  const [leads, setLeads] = useState([]);
 
-  const [finances, setFinances] = useState([]);
+  // State Users (Sekarang bisa diedit oleh Admin)
+  const [users, setUsers] = useState([
+    { id: 1, username: 'admin', pin: '1234', role: 'admin', name: 'Super Admin' },
+    { id: 2, username: 'sales', pin: '1234', role: 'marketing', name: 'Budi Sales' },
+    { id: 3, username: 'finance', pin: '1234', role: 'finance', name: 'Siti Keuangan' },
+  ]);
+  
+  const [leads, setLeads] = useState([
+    { id: 1, nama: "Budi Santoso", email: "budi@email.com", status: "Hot", unit: "Cluster Sakura A1", phone: "08123456789" },
+    { id: 2, nama: "Siti Aminah", email: "siti@email.com", status: "Cold", unit: "Cluster Sakura B2", phone: "08123456780" },
+    { id: 3, nama: "Andi Wijaya", email: "andi@email.com", status: "Warm", unit: "Modern Hill C5", phone: "08123456781" },
+  ]);
+
+  const [finances, setFinances] = useState([
+    { id: 1, deskripsi: "Booking Fee Unit A1", tipe: "Masuk", jumlah: 10000000, tanggal: "2023-10-01" },
+    { id: 2, deskripsi: "Biaya Marketing Ads", tipe: "Keluar", jumlah: 2500000, tanggal: "2023-10-02" },
+    { id: 3, deskripsi: "Pelunasan DP Unit B2", tipe: "Masuk", jumlah: 45000000, tanggal: "2023-10-05" },
+  ]);
 
   const [simParams, setSimParams] = useState({
     hargaProperti: 500000000,
@@ -621,90 +765,57 @@ export default function App() {
   });
 
   const [aiAnalysis, setAiAnalysis] = useState(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // Firestore listeners: keep local state in sync with `leads` and `finances` collections
-  useEffect(() => {
-    const q = query(collection(db, 'leads'), orderBy('nama'));
-    const unsub = onSnapshot(q, snapshot => {
-      setLeads(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, err => console.error('Leads listener error', err));
-    return () => unsub();
-  }, []);
+  // --- Fungsi Logika ---
 
-  useEffect(() => {
-    const q = query(collection(db, 'finances'), orderBy('tanggal', 'desc'));
-    const unsub = onSnapshot(q, snapshot => {
-      setFinances(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, err => console.error('Finances listener error', err));
-    return () => unsub();
-  }, []);
+  // User Management Logic
+  const handleSaveUser = (newUser) => {
+    const exists = users.find(u => u.id === newUser.id);
+    if (exists) {
+      setUsers(users.map(u => u.id === newUser.id ? newUser : u));
+    } else {
+      setUsers([...users, newUser]);
+    }
+  };
+
+  const handleDeleteUser = (id) => {
+    if (confirm("Hapus user ini?")) {
+      setUsers(users.filter(u => u.id !== id));
+    }
+  };
 
   const handleSaveLead = (newLead) => {
-    (async () => {
-      try {
-        if (newLead.id && typeof newLead.id === 'string') {
-          const id = newLead.id;
-          const payload = { ...newLead };
-          delete payload.id;
-          await setDoc(doc(db, 'leads', id), payload);
-        } else {
-          await addDoc(collection(db, 'leads'), newLead);
-        }
-      } catch (err) {
-        console.error('Error saving lead', err);
-      }
-    })();
+    const exists = leads.find(l => l.id === newLead.id);
+    if (exists) {
+      setLeads(leads.map(l => l.id === newLead.id ? newLead : l));
+    } else {
+      setLeads([...leads, newLead]);
+    }
   };
 
   const handleDeleteLead = (id) => {
     if (confirm("Hapus data konsumen ini?")) {
-      (async () => {
-        try {
-          await deleteDoc(doc(db, 'leads', id));
-        } catch (err) {
-          console.error('Error deleting lead', err);
-        }
-      })();
+      setLeads(leads.filter(l => l.id !== id));
     }
   };
 
   const handleSaveFinance = (newFin) => {
-    (async () => {
-      try {
-        if (newFin.id && typeof newFin.id === 'string') {
-          const id = newFin.id;
-          const payload = { ...newFin };
-          delete payload.id;
-          await setDoc(doc(db, 'finances', id), payload);
-        } else {
-          await addDoc(collection(db, 'finances'), newFin);
-        }
-      } catch (err) {
-        console.error('Error saving finance', err);
-      }
-    })();
+    const exists = finances.find(f => f.id === newFin.id);
+    if (exists) {
+      setFinances(finances.map(f => f.id === newFin.id ? newFin : f));
+    } else {
+      setFinances([...finances, newFin]);
+    }
   };
 
   const handleDeleteFinance = (id) => {
     if (confirm("Hapus transaksi ini?")) {
-      (async () => {
-        try {
-          await deleteDoc(doc(db, 'finances', id));
-        } catch (err) {
-          console.error('Error deleting finance', err);
-        }
-      })();
+       setFinances(finances.filter(f => f.id !== id));
     }
   };
 
   const handleLogin = (username, pin, onError) => {
-    const users = [
-      { id: 1, username: 'admin', pin: '1234', role: 'admin', name: 'Super Admin' },
-      { id: 2, username: 'sales', pin: '1234', role: 'marketing', name: 'Budi Sales' },
-      { id: 3, username: 'finance', pin: '1234', role: 'finance', name: 'Siti Keuangan' },
-    ];
-
+    // Mencari user di state 'users' yang dinamis
     const foundUser = users.find(u => u.username.toLowerCase() === username.toLowerCase() && u.pin === pin);
 
     if (foundUser) {
@@ -715,23 +826,29 @@ export default function App() {
     }
   };
 
-  const hitungSimulasi = async () => {
-    setIsAnalyzing(true);
-    try {
-      const analysis = await analyzeKPR(simParams);
-      setAiAnalysis({
-        cicilanBulan: analysis.cicilanBulan,
-        dti: analysis.dti.toFixed(1),
-        status: analysis.status,
-        score: analysis.score,
-        message: analysis.message,
-      });
-    } catch (err) {
-      console.error('Error analyzing KPR:', err);
-      alert(`Gagal menganalisa KPR:\n\n${err.message}\n\nPastikan:\n1. Gemini API key valid di .env.local\n2. Koneksi internet aktif\n3. API quota belum habis`);
-    } finally {
-      setIsAnalyzing(false);
+  const hitungSimulasi = () => {
+    const p = simParams.hargaProperti - simParams.dp;
+    const r = (simParams.bunga / 100) / 12;
+    const n = simParams.tenor * 12;
+    
+    const cicilanBulan = (p * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+    const dti = (cicilanBulan / simParams.pendapatan) * 100;
+
+    let status = "Aman";
+    let score = 95;
+    let message = "Profil sangat layak. Probabilitas KPR disetujui sangat tinggi.";
+
+    if (dti > 40) {
+      status = "Beresiko";
+      score = 30;
+      message = "Cicilan melebihi 40% pendapatan. Disarankan memperbesar DP.";
+    } else if (dti > 30) {
+      status = "Waspada";
+      score = 65;
+      message = "Cukup aman, namun bank mungkin akan meminta dokumen tambahan.";
     }
+
+    setAiAnalysis({ cicilanBulan, dti: dti.toFixed(1), status, score, message });
   };
 
   const getMenuItems = () => {
@@ -740,6 +857,7 @@ export default function App() {
       { id: 'leads', label: 'Konsumen', icon: Users, roles: ['admin', 'marketing'] },
       { id: 'simulasi', label: 'Simulasi AI', icon: Calculator, roles: ['admin', 'marketing'] },
       { id: 'finance', label: 'Keuangan', icon: PieChart, roles: ['admin', 'finance'] },
+      { id: 'users', label: 'Manajemen User', icon: Shield, roles: ['admin'] }, // Menu baru
     ];
     
     if (!user) return [];
@@ -755,6 +873,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 flex flex-col md:flex-row font-sans overflow-hidden">
       
+      {/* Sidebar Laptop (Fixed) */}
       <aside className="hidden md:flex flex-col w-64 bg-white dark:bg-slate-800 border-r border-slate-100 dark:border-slate-700 h-screen sticky top-0 p-6 z-40">
         <div className="flex items-center gap-2 mb-10 px-2">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-blue-200">
@@ -772,7 +891,8 @@ export default function App() {
                 activeTab === item.id 
                   ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20' 
                   : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700/50'
-              }`}>
+              }`}
+            >
               <item.icon size={20} />
               {item.label}
             </button>
@@ -795,6 +915,7 @@ export default function App() {
         </div>
       </aside>
 
+      {/* Main Content Area (Scrollable) */}
       <main className="flex-1 p-4 md:p-8 pb-24 md:pb-8 overflow-y-auto h-screen">
         <header className="md:hidden flex items-center justify-between mb-6 sticky top-0 bg-slate-50 dark:bg-slate-900 z-30 py-2">
           <div className="flex items-center gap-2">
@@ -831,8 +952,7 @@ export default function App() {
               params={simParams} 
               setParams={setSimParams} 
               onCalculate={hitungSimulasi} 
-              result={aiAnalysis}
-              isAnalyzing={isAnalyzing}
+              result={aiAnalysis} 
             />
           )}
 
@@ -843,9 +963,18 @@ export default function App() {
               onDeleteFinance={handleDeleteFinance}
             />
           )}
+
+          {activeTab === 'users' && (
+            <UserManagementView
+              users={users}
+              onSaveUser={handleSaveUser}
+              onDeleteUser={handleDeleteUser}
+            />
+          )}
         </div>
       </main>
 
+      {/* Mobile Nav (Fixed Bottom) */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 px-6 py-3 flex justify-between items-center z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
         {menuItems.map(item => (
           <button
@@ -853,7 +982,8 @@ export default function App() {
             onClick={() => setActiveTab(item.id)}
             className={`flex flex-col items-center gap-1 transition-all ${
               activeTab === item.id ? 'text-blue-600 scale-105' : 'text-slate-400'
-            }`}>
+            }`}
+          >
             <item.icon size={22} strokeWidth={activeTab === item.id ? 2.5 : 2} />
             <span className="text-[10px] font-bold">{item.label}</span>
           </button>
